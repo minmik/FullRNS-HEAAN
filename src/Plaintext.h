@@ -30,6 +30,8 @@ public:
 	Plaintext(const Plaintext& ptxt);
 
 	Plaintext& operator=(const Plaintext &o);
+
+	~Plaintext();
 	
 };
 

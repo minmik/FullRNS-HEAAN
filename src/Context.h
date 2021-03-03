@@ -16,7 +16,9 @@
 #include "Common.h"
 #include "Numb.h"
 
-#define Q0_BIT_SIZE 61
+
+#define Q0_BIT_SIZE 61 ///< /// Q0 = q0 = 2^61 (fixed)
+#define M_PI       3.14159265358979323846
 
 using namespace std;
 
@@ -28,23 +30,25 @@ class Context {
 public:
 
 	// Encryption parameters
-	long logN; ///< Logarithm of Ring Dimension
-	long logNh; ///< Logarithm of Ring Dimension - 1
-	long L; ///< Maximum Level that we want to support
-	long K; ///< The number of special modulus (usually L + 1)
+	long logN; ///< Logarithm of Ring Dimension ex) 15
+	long logNh; ///< Logarithm of Ring Dimension - 1 ex) 15 - 1 = 14
+	long L; ///< Maximum Level that we want to support ex) 10
+	long K; ///< The number of special modulus (usually L + 1) ex) 10 + 1 = 11
+	/// q_0 q_1 q_2 ... q_(L-1)
+	/// p_0 p_1 p_2 ... p_(K-1)
 
-	long N;
-	long M;
-	long Nh;
+	long N; ///< 2^logN ex) 2^15
+	long M; ///< 2 * N ex) 2^16
+	long Nh; ///< N / 2 ex) 2^14
 
-	long logp;
-	long p;
+	long logp; ///< scaling factor's log ex) 55
+	long p; ///< scaling factor ex) 2^55
 
-	long h;
-	double sigma;
+	long h; ///< Hamming distance ex) 64 (default)
+	double sigma; ///< error sampling standard deviation ex) 3.2(default)
 
-	uint64_t* qVec;
-	uint64_t* pVec;
+	uint64_t* qVec; ///< vector of q
+	uint64_t* pVec; ///< vector of p
 
 	uint64_t* qrVec; // Barrett reduction
 	uint64_t* prVec; // Barrett recution
@@ -55,90 +59,154 @@ public:
 	uint64_t* qkVec; // Montgomery reduction
 	uint64_t* pkVec; // Montgomery reduction
 
-	uint64_t* qdVec;
-	uint64_t* pdVec;
+	uint64_t* qdVec; // q * 2
+	uint64_t* pdVec; // p * 2
 
-	uint64_t* qInvVec;
-	uint64_t* pInvVec;
+	uint64_t* qInvVec; // q^-1 mod 2^64
+	uint64_t* pInvVec; // p^-1 mod 2^64
 
-	uint64_t* qRoots;
-	uint64_t* pRoots;
+    // for r such that
+    // r^((q - 1) / prime) = 1 mod q
+    // qRoot is such that
+    // qRoot = r^((q - 1) / M) mod q
+	uint64_t* qRoots; // M-th root of unity of q
+	uint64_t* pRoots; // M-th root of unity of p
 
-	uint64_t* qRootsInv;
-	uint64_t* pRootsInv;
+    // qRoots^-1 mod q
+	uint64_t* qRootsInv; // qRoots^-1 mod q
+	uint64_t* pRootsInv; // pRoots^-1 mod p
 
-	uint64_t** qRootPows;
-	uint64_t** pRootPows;
+    // bitreversed order
+	// 1 qRoot qRoots^2 ... qRoots^(N-1)
+	// all mod q
+	uint64_t** qRootPows; // 1, qRoot, qRoots^2, ..., qRoots^(N-1) mod q
+	uint64_t** pRootPows; // 1, pRoot, pRoots^2, ..., pRoots^(N-1) mod p
 
-	uint64_t** qRootPowsInv;
-	uint64_t** pRootPowsInv;
+    // bitreversed order
+	// 1 qRootsIns qRootsInv^2 ... qRootsInv^(N-1)
+	// all mod q
+	uint64_t** qRootPowsInv; // 1, qRootsInv, qRootsInv^2, ..., qRootsInv^(N-1) mod q
+	uint64_t** pRootPowsInv; // 1, pRootsIns, pRootsInv^2, ..., pRootsInv^(N-1) mod p
 
-	uint64_t* NInvModq;
-	uint64_t* NInvModp;
+    // N^-1 mod q
+	uint64_t* NInvModq; // N^-1 mod q
+	uint64_t* NInvModp; // N^-1 mod p
 
-	uint64_t** qRootScalePows;
-	uint64_t** pRootScalePows;
+    // bitreversed order
+	// (qRoots^{1, 2, ..., N - 1} * 2^32 mod q) * 2^32 mod q
+	uint64_t** qRootScalePows; // (qRoots^{1, 2, ..., N - 1} * 2^32 mod q) * 2^32 mod q
+	uint64_t** pRootScalePows; // (pRoots^{1, 2, ..., N - 1} * 2^32 mod p) * 2^32 mod p
 
-	uint64_t** qRootScalePowsOverq;
-	uint64_t** pRootScalePowsOverp;
+    // bitreversed order
+	// floor(qRoots^{1, 2, ..., N - 1} * 2^64 / q)
+	uint64_t** qRootScalePowsOverq; // floor(qRoots^{1, 2, ..., N - 1} * 2^64 / q)
+	uint64_t** pRootScalePowsOverp; // floor(pRoots^{1, 2, ..., N - 1} * 2^64 / p)
 
-	uint64_t** qRootScalePowsInv;
-	uint64_t** pRootScalePowsInv;
+    // bitreversed order
+	// (qRootsInv^{1, 2, ..., N - 1} * 2^32 mod q) * 2^32 mod q
+	uint64_t** qRootScalePowsInv; // (qRootsInv^{1, 2, ..., N - 1} * 2^32 mod q) * 2^32 mod q
+	uint64_t** pRootScalePowsInv; // (pRootsInv^{1, 2, ..., N - 1} * 2^32 mod p) * 2^32 mod p
 
-	uint64_t* NScaleInvModq; // [i]
-	uint64_t* NScaleInvModp; // [k]
+    // 2^32 * N^-1 mod q
+	uint64_t* NScaleInvModq; // 2^32 * N^-1 mod q
+	uint64_t* NScaleInvModp; // 2^32 * N^-1 mod p
 
-	uint64_t** qHatModq; // [l][i] (phat_i)_l mod p_i
-	uint64_t* pHatModp; // [k] qhat_k mod q_k
+    // for basis {q_0, q_1, q_2, ... q_l} (l <= L)
+	// qHatModq[l][i] = (mult of all q_0 through q_l except q_i) mod q_i
+	uint64_t** qHatModq; // qHatModq[l][i] = (mult of all q_0 through q_l except q_i) mod q_i
+	
+	// for fixed basis {p_0, p_1, ..., p_{K-1}}
+	// pHatModp[k] = (mult of all p_0 through p_{K-1} except p_k) mod p_k
+	uint64_t* pHatModp; // pHatModp[k] = (mult of all p_0 through p_{K-1} except p_k) mod p_k
 
-	uint64_t** qHatInvModq; // [l][i] (qhat_i)_l^-1 mod q_i
-	uint64_t* pHatInvModp; // [k] phat_k^-1 mod p_k
+    // multicative inverse of qHatModq in mod q_i
+	uint64_t** qHatInvModq; // [l][i] multicative inverse of qHatModq in mod q_i
+	uint64_t* pHatInvModp; // [k] multicative inverse of pHatModp in mod p_k
 
-	uint64_t*** qHatModp; // [l] [i] [k]  (phat_i)_l mod q_k
+    // for basis {q_0, q_1, q_2, ... q_l} (l <= L)
+	// qHatModq[l][i][k] = (mult of all q_0 through q_l except q_i) mod p_k
+	uint64_t*** qHatModp; // qHatModq[l][i][k] = (mult of all q_0 through q_l except q_i) mod p_k
 
-	uint64_t** pHatModq; // [k][i] qhat_k mod p_i
+    // for fixed basis {p_0, p_1, ..., p_{K-1}}
+	// pHatModq[k][i] = (mult of all p_0 through p_{K-1} except p_k) mod q_i
+	uint64_t** pHatModq; // pHatModq[k][i] = (mult of all p_0 through p_{K-1} except p_k) mod q_i
 
-	uint64_t* PModq; // [i] qprod mod p_i
-	uint64_t* PInvModq; // [i] qprod mod p_i
+    // large P = mult of all p_k's
+	// P mod q_i and their inverse
+	uint64_t* PModq; // [i] large P mod q_i
+	uint64_t* PInvModq; // [i] large P^-1 mod q_i
 
-	uint64_t** QModp; // [i] qprod mod p_i
-	uint64_t** QInvModp; // [i] qprod mod p_i
+    // for basis {q_0, q_1, q_2, ... q_l} (l <= L)
+    // large Q = mult of all q_i's = q_0 * q_1 * ... * q_l
+	// QModp[l][k] = Q mod p_k and their inverse
+	uint64_t** QModp; // QModp[l][k] = Q_l mod p_k 
+	uint64_t** QInvModp; // QModp[l][k] = Q_l^-1 mod p_k
 
-	uint64_t** qInvModq; // [i][j] p_i^-1 mod p_j
+    // qInvModq[i][j] = q_i^-1 mod q_j
+	uint64_t** qInvModq; // [i][j] q_i^-1 mod q_j
 
-	long* rotGroup; ///< precomputed rotation group indexes
+	long* rotGroup; ///< precomputed rotation group indexes: 5^i
 
-	complex<double>* ksiPows; ///< precomputed ksi powers
+	complex<double>* ksiPows; ///< precomputed ksi powers (M + 1 complex array): e^(2 * pi * i / M)
 
 	map<string, double*> taylorCoeffsMap; ///< precomputed taylor coefficients
 
-	uint64_t* p2coeff;
-	uint64_t* pccoeff;
-	uint64_t* p2hcoeff;
+    // size = L * N ex) 10 * 2^15
+	// p = 2^55
+	uint64_t* p2coeff; // index N * i + (0 ~ N-1): p^2 mod q_i
+	uint64_t* pccoeff; // index N * i + (0 ~ N-1): (94.2372881 * p mod q_i) -> negateandequal
+	uint64_t* p2hcoeff;// index N * i + (0 ~ N-1): 0.5 * p^2 mod q_i
 
 	Context(long logN, long logp, long L, long K, long h = 64, double sigma = 3.2);
+
+    // disable copy or move
+	Context(const Context&) = delete;
+	Context& operator=(const Context&) = delete;
 
 	void arrayBitReverse(complex<double>* vals, const long size);
 	void arrayBitReverse(uint64_t* vals, const long size);
 
+    // plain Cooley-Tukey in-place DIT radix-2 FFT
 	void fft(complex<double>* vals, const long size);
+	
+	// plain Cooley-Tukey in-place DIT radix-2 inverse FFT, but do not divide by size
 	void fftInvLazy(complex<double>* vals, const long size);
+
+	// plain Cooley-Tukey in-place DIT radix-2 inverse FFT, and divide by size
 	void fftInv(complex<double>* vals, const long size);
 
+    // special FFT used for decoding
 	void fftSpecial(complex<double>* vals, const long size);
+	
+	// special inverse FFT used for encoding, lazy
 	void fftSpecialInvLazy(complex<double>* vals, const long size);
+	
+	// special inverse FFT used for encoding
 	void fftSpecialInv(complex<double>* vals, const long size);
 
+    
+	// ax = encode(vals)
 	void encode(uint64_t* ax, complex<double>* vals, long slots, long l);
-	void encode(uint64_t* ax, double* vals, long slots, long l);
 
+	// not used
+	void encode(uint64_t* ax, double* vals, long slots, long l);
+    
+	// ax = encode(val) where val is a single complex number
 	void encodeSingle(uint64_t* ax, complex<double>& val, long l);
+
+	// not used
 	void encodeSingle(uint64_t* ax, double val, long l);
 
+    // vals = decode(ax)
 	void decode(uint64_t* ax, complex<double>* vals, long slots, long l);
+
+	// not used
 	void decode(uint64_t* ax, double* vals, long slots, long l);
 
+    // 
 	void decodeSingle(uint64_t* ax, complex<double>& val, long l);
+	
+	// not used
 	void decodeSingle(uint64_t* ax, double val, long l);
 
 	void qiNTT(uint64_t* res, uint64_t* a, long index);
@@ -161,11 +229,13 @@ public:
 
 	void INTTAndEqual(uint64_t* a, long l, long k = 0);
 
+	// compute res = -a
 	void qiNegate(uint64_t* res, uint64_t* a, long index);
 	void piNegate(uint64_t* res, uint64_t* a, long index);
 
 	void negate(uint64_t* res, uint64_t* a, long l, long k = 0);
 
+    // compute a = -a
 	void qiNegateAndEqual(uint64_t* a, long index);
 	void piNegateAndEqual(uint64_t* a, long index);
 
@@ -250,15 +320,19 @@ public:
 
 	void evalAndEqual(uint64_t* a, long l);
 
+    // ModUp
 	void raiseAndEqual(uint64_t*& a, long l);
 	void raise(uint64_t* res, uint64_t* a, long l);
 
+    // ModDown
 	void backAndEqual(uint64_t*& a, long l);
 	void back(uint64_t* res, uint64_t* a, long l);
 
+    // Rescale
 	void reScaleAndEqual(uint64_t*& a, long l);
-	void reScale(uint64_t* res, uint64_t* a, long l);
+	void reScale(uint64_t* res, uint64_t* a, long l); // not implemented
 
+    // Simply Drop higher dl mod q_i's
 	void modDownAndEqual(uint64_t*& a, long l, long dl);
 	uint64_t* modDown(uint64_t* a, long l, long dl);
 

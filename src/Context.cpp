@@ -41,6 +41,9 @@ Context::Context(long logN, long logp, long L, long K, long h, double sigma) :
 	long cnt = 1;
 
 	bnd = 1;
+	// sample prime q0 near 2^61
+	// remember that q_j shoule be q_j = 1 (mod 2N)
+	// and M = 2N
 	while(1) {
 			uint64_t prime = (1ULL << Q0_BIT_SIZE) + bnd * M + 1;
 			if(primeTest(prime)) {
@@ -51,6 +54,9 @@ Context::Context(long logN, long logp, long L, long K, long h, double sigma) :
 	}
 
 	bnd = 1;
+	// sample near p = 2^55
+	// remember that q_j shoule be q_j = 1 (mod 2N)
+	// and M = 2N
 	while(cnt < L) {
 		uint64_t prime1 = (1ULL << logp) + bnd * M + 1;
 		if(primeTest(prime1)) {
@@ -65,6 +71,8 @@ Context::Context(long logN, long logp, long L, long K, long h, double sigma) :
 		bnd++;
 	}
 
+    // check precision
+	// 1 - 2^(-prec) < (q_j / p) < 1 + 2^(-prec)
 	if(logp - logN - 1 - ceil(log2(bnd)) < 10) {
 		cerr << "ERROR: too small number of precision" << endl;
 		cerr << "TRY to use larger logp or smaller depth" << endl;
@@ -124,6 +132,10 @@ Context::Context(long logN, long logp, long L, long K, long h, double sigma) :
 	NScaleInvModp = new uint64_t[K]();
 
 	// Generate Special Primes //
+    
+	// sample near p = 2^55
+	// p_j is also p_j = 1 (mod 2N)
+	// and M = 2N
 	cnt = 0;
 	while(cnt < K) {
 		uint64_t prime1 = (1ULL << logp) + bnd * M + 1;
@@ -313,6 +325,7 @@ Context::Context(long logN, long logp, long L, long K, long h, double sigma) :
 
 	ksiPows[M] = ksiPows[0];
 
+    // size = L * N ex) 10 * 2^15
 	p2coeff = new uint64_t[L << logN];
 
 	for (long i = 0; i < L; ++i) {
@@ -373,13 +386,14 @@ void Context::fft(complex<double>* vals, const long size) {
 	arrayBitReverse(vals, size);
 	for (long len = 2; len <= size; len <<= 1) {
 		long MoverLen = M / len;
-		long lenh = len >> 1;
+		long lenh = len >> 1; // len / 2
 		for (long i = 0; i < size; i += len) {
 			for (long j = 0; j < lenh; ++j) {
-				long idx = j * MoverLen;
+				long idx = j * MoverLen; ///< LOOK HERE
+				// in-place butterfly
 				complex<double> u = vals[i + j];
 				complex<double> v = vals[i + j + lenh];
-				v *= ksiPows[idx];
+				v *= ksiPows[idx]; // e^(2*idx*pi / M)
 				vals[i + j] = u + v;
 				vals[i + j + lenh] = u - v;
 			}
@@ -394,10 +408,11 @@ void Context::fftInvLazy(complex<double>* vals, const long size) {
 		long lenh = len >> 1;
 		for (long i = 0; i < size; i += len) {
 			for (long j = 0; j < lenh; ++j) {
-				long idx = (len - j) * MoverLen;
+				long idx = (len - j) * MoverLen; ///< LOOK HERE (inverse)
+				// in-place butterfly
 				complex<double> u = vals[i + j];
 				complex<double> v = vals[i + j + lenh];
-				v *= ksiPows[idx];
+				v *= ksiPows[idx]; // e^(2*idx*pi / M)
 				vals[i + j] = u + v;
 				vals[i + j + lenh] = u - v;
 			}
@@ -419,10 +434,11 @@ void Context::fftSpecial(complex<double>* vals, const long size) {
 			long lenh = len >> 1;
 			long lenq = len << 2;
 			for (long j = 0; j < lenh; ++j) {
-				long idx = ((rotGroup[j] % lenq)) * M / lenq;
+				long idx = ((rotGroup[j] % lenq)) * M / lenq; ///< LOOK HERE
+				// in-place butterfly
 				complex<double> u = vals[i + j];
 				complex<double> v = vals[i + j + lenh];
-				v *= ksiPows[idx];
+				v *= ksiPows[idx]; // e^(2*idx*pi / M)
 				vals[i + j] = u + v;
 				vals[i + j + lenh] = u - v;
 			}
@@ -436,7 +452,7 @@ void Context::fftSpecialInvLazy(complex<double>* vals, const long size) {
 			long lenh = len >> 1;
 			long lenq = len << 2;
 			for (long j = 0; j < lenh; ++j) {
-				long idx = (lenq - (rotGroup[j] % lenq)) * M / lenq;
+				long idx = (lenq - (rotGroup[j] % lenq)) * M / lenq; ///< LOOK HERE
 				complex<double> u = vals[i + j] + vals[i + j + lenh];
 				complex<double> v = vals[i + j] - vals[i + j + lenh];
 				v *= ksiPows[idx];
@@ -504,17 +520,19 @@ void Context::decode(uint64_t* a, complex<double>* v, long slots, long l) {
 	uint64_t* tmp = new uint64_t[N]();
 	copy(a, a + N, tmp);
 	long gap = Nh / slots;
-	qiINTTAndEqual(tmp, 0);
+	qiINTTAndEqual(tmp, 0); // INTT over q_0 (plaintext modulus) (effectively multiply by Vandermonde matrix)
 
-	uint64_t pr = qVec[0];
-	uint64_t pr_2 = qVec[0] / 2;
+	uint64_t pr = qVec[0]; // q_0
+	uint64_t pr_2 = qVec[0] / 2; // q_0 / 2
 
 	for (long j = 0, jdx = Nh, idx = 0; j < slots; ++j, jdx += gap, idx += gap) {
+		// reverse scaling by p
 		double mir = tmp[idx] <= pr_2 ? ((double) (tmp[idx]) / p) : (((double) (tmp[idx]) - (double) (pr)) / p);
 		double mii = tmp[jdx] <= pr_2 ? ((double) (tmp[jdx]) / p) : (((double) (tmp[jdx]) - (double) (pr)) / p);
 		v[j].real(mir);
 		v[j].imag(mii);
 	}
+	
 	fftSpecial(v, slots);
 }
 
@@ -580,6 +598,8 @@ void Context::qiNTTAndEqual(uint64_t* a, long index) {
 			for (long j = j1; j <= j2; j++) {
 
 				uint64_t T = a[j + t];
+
+				// some complex precision mult shit
 				unsigned __int128 U = static_cast<unsigned __int128>(T) * W;
 				uint64_t U0 = static_cast<uint64_t>(U);
 				uint64_t U1 = static_cast<uint64_t>(U >> 64);
@@ -587,6 +607,7 @@ void Context::qiNTTAndEqual(uint64_t* a, long index) {
 				unsigned __int128 Hx = static_cast<unsigned __int128>(Q) * q;
 				uint64_t H = static_cast<uint64_t>(Hx >> 64);
 				uint64_t V = U1 < H ? U1 + q - H : U1 - H;
+
 				a[j + t] = a[j] < V ? a[j] + q - V: a[j] - V;
 				a[j] += V;
 				if(a[j] > q) a[j] -= q;
@@ -678,9 +699,9 @@ void Context::qiINTTAndEqual(uint64_t* a, long index) {
 	uint64_t qd = qdVec[index];
 	uint64_t qInv = qInvVec[index];
 	long t = 1;
-	for (long m = N; m > 1; m >>= 1) {
+	for (long m = N; m > 1; m >>= 1) { // N, N/2, N/4, ..., 2
 		long j1 = 0;
-		long h = m >> 1;
+		long h = m >> 1; // N/2, N/4, ..., 1
 		for (long i = 0; i < h; i++) {
 			long j2 = j1 + t - 1;
 			uint64_t W = qRootScalePowsInv[index][h + i];
@@ -1349,21 +1370,24 @@ void Context::reScale(uint64_t* res, uint64_t* a, long l) {
 
 void Context::reScaleAndEqual(uint64_t*& a, long l) {
 	uint64_t* ra = new uint64_t[(l - 1) << logN]();
-	uint64_t* al = a + ((l - 1) << logN);
-	qiINTTAndEqual(al, l - 1);
+	uint64_t* al = a + ((l - 1) << logN); // coefficient residues for q_(l-1)
+	qiINTTAndEqual(al, l - 1); // INTT for q_(l-1)
 	for (long i = 0; i < l - 1; ++i) {
 		uint64_t* rai = ra + (i << logN);
 		uint64_t* ai = a + (i << logN);
 
 		copy(al, al + N, rai);
 		for (long n = 0; n < N; ++n) {
+			// rai[n] = al[n] mod q_i
 			modBarrett(rai[n], al[n], qVec[i], qrVec[i], qTwok[i]);
 		}
-		qiNTTAndEqual(rai, i);
+		qiNTTAndEqual(rai, i); // NTT for q_i
 
 
 		for (long n = 0; n < N; ++n) {
+			// rai[n]  = ai[n] - rai[n] mod q_i
 			subMod(rai[n], ai[n], rai[n], qVec[i]);
+			// rai[n] = rai[n] * q_(l-1)^-1 mod q_i
 			mulModBarrett(rai[n], rai[n], qInvModq[l - 1][i], qVec[i], qrVec[i], qTwok[i]);
 		}
 	}
@@ -1396,23 +1420,25 @@ void Context::leftRot(uint64_t* res, uint64_t* a, long l, long rotSlots) {
 //		}
 //	}
 
-	uint64_t* tmp = new uint64_t[l << logN]();
+	uint64_t* tmp = new uint64_t[l << logN](); // l*N array
 	copy(a, a + (l << logN), tmp);
-	INTTAndEqual(tmp, l);
+	INTTAndEqual(tmp, l); // intt to recover original form
 	long pow = rotGroup[rotSlots];
 	for (long i = 0; i < l; ++i) {
-		uint64_t* resi = res + (i << logN);
-		uint64_t* tmpi = tmp + (i << logN);
+		uint64_t* resi = res + (i << logN); // res[iN] -> q_i
+		uint64_t* tmpi = tmp + (i << logN); // tmp[iN] -> q_i
 		for (long n = 0; n < N; ++n) {
+			// rotation is basically permutation 
 			long npow = n * pow;
-			long shift = npow % M;
-			if(shift < N) {
+			long shift = npow % M; // divide by 2N
+			if(shift < N) { // (-1)^even
 				resi[shift] = tmpi[n];
-			} else {
+			} else { // (-1)^ odd
 				resi[shift - N] = qVec[i] - tmpi[n];
 			}
 		}
 	}
+	// return to ntt form
 	NTTAndEqual(res, l);
 }
 

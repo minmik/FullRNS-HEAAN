@@ -36,3 +36,8 @@ Ciphertext& Ciphertext::operator=(const Ciphertext& o) {
 	}
 	return *this;
 }
+
+Ciphertext::~Ciphertext() {
+	if(ax != nullptr) delete[] ax;
+	if(bx != nullptr) delete[] bx;
+}

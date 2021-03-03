@@ -71,6 +71,7 @@ uint64_t invMod(uint64_t x, uint64_t m) {
 	}
 }
 
+
 uint64_t powMod(uint64_t x, uint64_t y, uint64_t modulus) {
 	uint64_t res = 1;
 	while (y > 0) {
@@ -84,6 +85,9 @@ uint64_t powMod(uint64_t x, uint64_t y, uint64_t modulus) {
 }
 
 uint64_t inv(uint64_t x) {
+	// -1 -> 2^64 - 1
+	// x ^ (2^64 - 1) mod 2^64 (overflow)
+	// if x is an odd number, it will return x^-1 mod 2^64
 	return pow(x, static_cast<uint64_t>(-1));
 }
 
@@ -136,6 +140,7 @@ void findPrimeFactors(set<uint64_t> &s, uint64_t number) {
 		s.insert(number);
 	}
 }
+
 
 uint64_t findPrimitiveRoot(uint64_t modulus) {
 	set<uint64_t> s;

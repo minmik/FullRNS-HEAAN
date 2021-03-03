@@ -29,10 +29,13 @@ void subMod(uint64_t& r, uint64_t a, uint64_t b, uint64_t p);
 
 void subModAndEqual(uint64_t& a, uint64_t b, uint64_t p);
 
+// r = (a*b mod p)
 void mulMod(uint64_t& r, uint64_t a, uint64_t b, uint64_t p);
 
+// r = (a*b mod p)
 void mulModBarrett(uint64_t& r, uint64_t a, uint64_t b, uint64_t p, uint64_t pr, long twok);
 
+// return r = a % m 
 void modBarrett(uint64_t &r, uint64_t a, uint64_t m, uint64_t mr, long twok);
 
 void modBarrett(uint64_t &r, unsigned __int128 a, uint64_t m, uint64_t mr, long twok);
@@ -41,6 +44,7 @@ void mulModAndEqual(uint64_t& a, uint64_t b, uint64_t p);
 
 uint64_t invMod(uint64_t x, uint64_t p);
 
+// returns x^y mod p
 uint64_t powMod(uint64_t x, uint64_t y, uint64_t p);
 
 uint64_t inv(uint64_t x);
@@ -52,11 +56,17 @@ uint32_t bitReverse(uint32_t x);
 uint64_t gcd(uint64_t a, uint64_t b);
 
 long gcd(long a, long b);
-
+ 
+// find prime factors of the number and put it into set s
+// ex) 84 = 2^2 * 3 * 7 -> {2, 3, 7}
 void findPrimeFactors(set<uint64_t> &s, uint64_t number);
 
+// return r such that
+// r^((m - 1) / prime) = 1 mod m
 uint64_t findPrimitiveRoot(uint64_t m);
 
+// return res such that for primitive root r
+// res = r^((p - 1) / M) mod p
 uint64_t findMthRootOfUnity(uint64_t M, uint64_t p);
 
 bool primeTest(uint64_t p);
